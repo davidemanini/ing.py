@@ -205,7 +205,9 @@ class _jencoder(json.JSONEncoder):
             return data
 
         if isinstance(obj, Transactions):
-            data = { "__Transaction__": True,
+            if not obj.initialized:
+                return None
+            data = { "__Transactions__": True,
                      "start_date": obj.start_date,
                      "end_date": obj.end_date,
                      "account_number": obj.account_number,
@@ -224,37 +226,6 @@ class _jencoder(json.JSONEncoder):
         return json.JSONEncoder.default(self,obj)
 
 
-class _jencoder_old(json.JSONEncoder):
-    def default(self, obj):
-        dateft="%Y-%m-%d"
-        timeft="%H:%M:%S"
-        if isinstance(obj, Transactions):
-            mov=[]
-            for i in obj.movements:
-                m = { "date_account": datetime.date.strftime(i.date_account,dateft),
-                      "date_available": datetime.date.strftime(i.date_available,dateft),
-                      "amount": i.amount,
-                      "correspondent_name": i.correspondent_name,
-                      "correspondent_name": i.correspondent_name,
-                      "information": i.information }
-                mov.append(m)
-
-            data = { "__Transaction__": True,
-                     "start_date": datetime.date.strftime(obj.start_date,dateft),
-                     "end_date": datetime.date.strftime(obj.end_date,dateft),
-                     "account_number": obj.account_number,
-                     "iban": obj.iban,
-                     "end_account": obj.end_account,
-                     "start_account": obj.start_account,
-                     "movements": mov }
-
-            return data
-
-        if isinstance(obj,datetime.time):
-            return datetime.time.strftime(obj,timeft)
-        
-        return json.JSONEncoder.default(self,obj)
-    
 
 
 
@@ -428,6 +399,45 @@ returns a transaction object, filled with the proper information"""
         t.initialized=True
         return t
 
+    def load_json(string):
+        dateft="%Y-%m-%d"
+        timeft="%H:%M:%S"
+        def decoder(obj):
+            def datetime_parser(i,j):
+                if "date" in i:
+                    return datetime.date.fromisoformat(j)
+                if "time" in i:
+                    return datetime.time.fromisoformat(j)
+                return j
+            
+            if "__Movement__" in obj:
+                m=Transactions.Movement()
+                for i,j in obj.items():
+                    if i=="__Movement__":
+                        continue
+                    m.__setattr__(i,datetime_parser(i,j))
+
+                return m
+
+            if "__Transactions__" in obj:
+                t=Transactions()
+                for i,j in obj.items():
+                    if i=="__Movement__":
+                        continue
+                    t.__setattr__(i,datetime_parser(i,j))
+
+                t.initialized=True
+
+                return t
+
+            for i in obj:
+                obj[i]=datetime_parser(i,obj[i])
+            return obj
+
+        return json.loads(string,object_hook=decoder)
+        
+
+    
     def daily_amount(self, start=None, end=None):
         dt=datetime.timedelta(days=1)
         if start==None:

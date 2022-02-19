@@ -1,3 +1,6 @@
 *~
 *.xls
 *.csv
+.~*#
+test.json
+__pycache__
