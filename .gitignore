@@ -3,4 +3,5 @@
 *.csv
 .~*#
 test.json
+test
 __pycache__

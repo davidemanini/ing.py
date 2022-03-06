@@ -4,7 +4,6 @@ import re
 import sys
 import datetime
 import time
-import bisect
 import json
 
 def itastr2amount(s):
@@ -400,8 +399,6 @@ returns a transaction object, filled with the proper information"""
         return t
 
     def load_json(string):
-        dateft="%Y-%m-%d"
-        timeft="%H:%M:%S"
         def decoder(obj):
             def datetime_parser(i,j):
                 if "date" in i:
@@ -436,6 +433,8 @@ returns a transaction object, filled with the proper information"""
 
         return json.loads(string,object_hook=decoder)
         
+    def dump_json(self, indent=4):
+        return json.dumps(self,cls=_jencoder, indent=indent)
 
     
     def daily_amount(self, start=None, end=None):
@@ -443,17 +442,19 @@ returns a transaction object, filled with the proper information"""
         if start==None:
             start=self.start_date
         if end==None:
-            end=self.end_date+dt
+            end=self.end_date
 
-        if start<self.start_date or end>self.end_date:
-            raise RangeError
+
+        assert start<=end,"End is before start"
+        assert (start>=self.start_date and end<=self.end_date),"Range error"
+#            raise RangeError
         
         t=self.start_date
-        current_amount=self.start_available
+        current_amount=self.start_account
         ret=[]
-        for i in self.movements:
-            while t<i.date_available:
-                if t==end:
+        for i in sorted(self.movements):
+            while t<i.date_account:
+                if t>end:
                     return ret
                 if t>=start:
                     ret.append((t,current_amount))
@@ -462,81 +463,170 @@ returns a transaction object, filled with the proper information"""
                 
             current_amount=current_amount+i.amount
 
-        while t<end:
-            ret.append((t,amount))
+        while t<=end:
+            ret.append((t,current_amount))
             t=t+dt
 
         return ret
 
+    def cut_before(self, end):
+        assert end>self.start_date,"Range error"
+        dt=datetime.timedelta(days=1)
 
-    def dump_json(self, indent=4):
-        return json.dumps(self,cls=_jencoder, indent=indent)
-    
-def main(filename):
-    
-    if filename[-3:]=='csv':
-        transactions=csv2transaction_list(filename)
-    elif filename[-3:]=='xls':
-        transactions=xls2transaction_list(filename)
-    else:
-        print(sys.stderr,"{%s}: bad extension.".format(filename))
-        return 1
-                  
-    expenses={}
-
-    revenue=0
-    expenditure=0
-
-    begindate=datetime.date(1900,1,1)
-    
-    for info in transactions:
+        end=min(end, self.end_date+dt)
         
-        if info["date1"]>=begindate:
-            c='other'
-            if 'correspondent_name' in info:
-                c=info['correspondent_name']
-
-            try:
-                if info["method"]=="cash_withdrawal":
-                    c="cash_withdrawal"
-            except:
-                print(info)
-                raise
+        ret=Transactions()
+        ret.iban=self.iban
+        ret.account_number=self.account_number
+        ret.start_date=self.start_date
+        ret.start_account=self.start_account
         
-            if not c in expenses:
-                expenses[c]=0
+        ret.movements=[]
+        ret.end_date=end-dt
+        ret.end_account=ret.start_account
 
-            expenses[c]=expenses[c]+info['amount']
-            if info['amount']>=0:
-                revenue=revenue+info['amount']
-            else:
-                expenditure=expenditure+info['amount']
-            
+        ret.initialized=True
+        for i in sorted(self.movements):
+            if i.date_account>=end:
+                return ret
+            ret.movements.append(i)
+            ret.end_account=ret.end_account+i.amount
+        return ret
+                
+
+    def cut_notbefore(self, start):
+        assert start<=self.end_date,"Range error"
+        dt=datetime.timedelta(days=1)
+
+        start=max(start, self.start_date)
+        
+        ret=Transactions()
+        ret.iban=self.iban
+        ret.account_number=self.account_number
+        ret.end_date=self.end_date
+        ret.end_account=self.end_account
+        
+        ret.movements=[]
+        ret.start_date=start
+        ret.start_account=ret.end_account
+
+        ret.initialized=True
+        for i in sorted(self.movements, reverse=True):
+            if i.date_account<start:
+                return ret
+            ret.movements.append(i)
+            ret.start_account=ret.start_account-i.amount
+        return ret
+                
+
 
     
+    def join(self,t):
+        assert (self.account_number==t.account_number or self.iban==t.iban),"Transactions belonging to different accounts"
+        assert (self.end_date>t.start_date or t.end_date>self.start_date),"Non-intersecting ranges"
 
-    for i in sorted(expenses,key=expenses.__getitem__):
-        print(i+":",expenses[i]/100)
+        if self.end_date>t.start_date:
+            ret=self.cut_before(t.start_date)
+            assert ret.end_account==t.start_account,"Non matching accounts"
+            ret.movements=ret.movements+t.movements
+            ret.end_date=t.end_date
+            ret.end_account=t.end_account
+            return ret
+
+    def check_amount(self):
+        a=self.start_account-self.end_account
+        for i in self.movements:
+            a=a+i.amount
+        return a
+    
+        
+    
+    
 
 
-    print('\nTotal revenue:', revenue/100)
-    print('Total expenditure:', expenditure/100)
-    print('Difference: ', (revenue+expenditure)/100)
-    return 0
-
-
-import argparse
 
 
 
-def main2(arg):
+def main(arg,environ):
+    import argparse
+    
+    
     parser = argparse.ArgumentParser(description='Analize ING-generated bank account data.')
-    
-    parser.add_argument('infile', nargs='?', type=argparse.FileType('r'), default=sys.stdin)
-#    parser.add_argument('--from-date', '-f', nargs=1, default='1900-01-01', 
-    
 
     
+    parser.add_argument('--input', dest='input_file', type=argparse.FileType('r'), default=sys.stdin)
+    parser.add_argument('--output', dest='output_file', type=argparse.FileType('w'), default=sys.stdout)
+    parser.add_argument('--data-dir', dest='data_dir', type=str, default=environ['ING_DATADIR'])
+#    parser.add_argument('--from-date', '-f', nargs=1, default='1900-01-01', 
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument('--to-json', action='store_true')
+    action.add_argument('--add-to-db', action='store_true')
+    action.add_argument('--daily-amount', action='store_true')
+    a = parser.parse_args(arg)
+
+    data_dir=a.data_dir
+
+    decoder=Transactions.load_json
+    if a.input_file.name[-3:]=="xls":
+        decoder=Transactions.load_xls
+    if a.to_json:
+        string=a.input_file.read()
+        a.input_file.close()
+        
+        t=decoder(string)
+        a.output_file.write(t.dump_json())
+        a.output_file.close()
+        return 0
+    elif a.add_to_db:
+        date_str=datetime.datetime.today().strftime("%Y-%M-%dT%H:%m:%S")
+        import os
+        if not os.path.isdir(data_dir):
+            os.mkdir(data_dir)
+            print("Created data directory "+data_dir+".", file=sys.stderr)
+
+        data_file=data_dir+"/db.json"
+        s=a.input_file.read()
+        a.input_file.close()
+        t=decoder(s)
+        if os.path.isfile(data_file):
+            f=open(data_file,"r")
+            string=f.read()
+            f.close()
+            t2=Transactions.load_json(string)
+            t3=t.join(t2)
+
+            os.rename(data_file,data_dir+"/db."+date_str+".json")
+
+            f=open(data_file,"w")
+            f.write(t3.dump_json())
+            f.close()
+        else:
+            f=open(data_file,"w")
+            f.write(t.dump_json())
+            f.close()
+
+        f=open(data_dir+"/"+date_str+".xls","w")
+        f.write(s)
+        f.close()
+        return 0
+            
+    elif a.daily_amount:
+        string=a.input_file.read()
+        a.input_file.close()
+
+        t=decoder(string)
+        daily_amount=t.daily_amount()
+        print("date,amount",file=a.output_file)
+        for i in daily_amount:
+            print(str(i[0])+","+str(i[1]),file=a.output_file)
+
+        a.output_file.close()
+        return 0
+        
+    else:
+        print("Error: an action must be specified.", file=sys.stderr)
+        return 1
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    import os
+    sys.exit(main(sys.argv[1:],os.environ))
