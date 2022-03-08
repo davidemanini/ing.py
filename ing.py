@@ -562,6 +562,7 @@ def main(arg,environ):
     action.add_argument('--to-json', action='store_true')
     action.add_argument('--add-to-db', action='store_true')
     action.add_argument('--daily-amount', action='store_true')
+    action.add_argument('--plot-amount', action='store_true')
     a = parser.parse_args(arg)
 
     data_dir=a.data_dir
@@ -593,6 +594,13 @@ def main(arg,environ):
             string=f.read()
             f.close()
             t2=Transactions.load_json(string)
+            if t2.end_date>=t.end_date:
+                print("No newer information is provided. Quitting...", file=sys.stderr)
+                return 0
+            if t2.end_date<=t.begin_date:
+                print("Error: provided data do not intersect current database", file=sys.stderr)
+                return 1
+            
             t3=t.join(t2)
 
             os.rename(data_file,data_dir+"/db."+date_str+".json")
@@ -622,7 +630,33 @@ def main(arg,environ):
 
         a.output_file.close()
         return 0
-        
+
+    elif a.plot_amount:
+        string=a.input_file.read()
+        a.input_file.close()
+
+        t=decoder(string)
+        daily_amount=t.daily_amount()
+
+        x=[i[0] for i in daily_amount]
+        y=[i[1]/100 for i in daily_amount]
+        try:
+            import matplotlib.pyplot as plt
+            import matplotlib.dates as mdates
+        except ModuleNotFoundError:
+            print("Error: matplotlib is not installed.\nTry something like ``sudo apt-get install python3-matplotlib",file=sys.stderr)
+
+        fig, ax = plt.subplots(constrained_layout=True)
+        locator = mdates.AutoDateLocator()
+        formatter = mdates.ConciseDateFormatter(locator)
+        ax.xaxis.set_major_locator(locator)
+        ax.xaxis.set_major_formatter(formatter)
+
+        ax.plot(x,y,"-+")
+        plt.xlabel("date")
+        plt.ylabel("amount")
+        plt.grid(ls=":")
+        plt.show()
     else:
         print("Error: an action must be specified.", file=sys.stderr)
         return 1
