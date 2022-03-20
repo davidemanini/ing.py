@@ -7,6 +7,10 @@ import time
 import json
 
 def itastr2amount(s):
+    a=s.replace('.','').replace(',','.')
+    return int(100*float(a))
+
+def itastr2amount_old(s):
     a=s.replace('.','').split(',')
     ret=100*int(a[0])
     if len(a)==2 and len(a[1])>0:
@@ -43,19 +47,25 @@ class _jencoder(json.JSONEncoder):
         dateft="%Y-%m-%d"
         timeft="%H:%M:%S"
         if isinstance(obj, Account.Movement):
-            data = {  "__Movement__": True}
-            for i in obj.items():
-                data[i]=obj.__getattribute__(i)
+            data = {  "__Movement__": True,
+                      "date_account": obj.date_account,
+                      "date_available": obj.date_available,
+                      "amount": obj.amount,
+                      "method": obj.method,
+                      "correspondent_name": obj.correspondent_name,
+                      "correspondent_id": obj.correspondent_id,
+                      "details": obj.details }
             return data
 
         if isinstance(obj, Account):
-            if not obj.initialized:
-                return None
-            data = { "__Account__": True}
-            for i in obj.items():
-                if i=="initialized":
-                    continue
-                data[i]=obj.__getattribute__(i)
+            data = { "__Account__": True,
+                     "start_date": obj.start_date,
+                     "end_date": obj.end_date,
+                     "account_number": obj.account_number,
+                     "iban": obj.iban,
+                     "end_account": obj.end_account,
+                     "start_account": obj.start_account,
+                     "movements": obj.movements }
             return data
 
         if isinstance(obj,datetime.time):
@@ -225,6 +235,7 @@ returns a transaction object, filled with the proper information"""
             t.movements.append(m)
             t.start_account=t.start_account-m.amount
 
+        t.movements.sort()
         t.initialized=True
         return t
 
@@ -271,7 +282,6 @@ returns a transaction object, filled with the proper information"""
 
     def daily_amount(self, start=None, end=None):
         assert self.initialized,"Not initialized account"
-        assert t.initialized,"Not initialized account"
         dt=datetime.timedelta(days=1)
         if start==None:
             start=self.start_date
@@ -305,7 +315,6 @@ returns a transaction object, filled with the proper information"""
 
     def cut_before(self, end):
         assert self.initialized,"Not initialized account"
-        assert t.initialized,"Not initialized account"
         assert end>self.start_date,"Range error"
         dt=datetime.timedelta(days=1)
 
@@ -332,7 +341,6 @@ returns a transaction object, filled with the proper information"""
 
     def cut_notbefore(self, start):
         assert self.initialized,"Not initialized account"
-        assert t.initialized,"Not initialized account"
         assert start<=self.end_date,"Range error"
         dt=datetime.timedelta(days=1)
 
@@ -358,7 +366,6 @@ returns a transaction object, filled with the proper information"""
 
     def cut_after(self, start):
         assert self.initialized,"Not initialized account"
-        assert t.initialized,"Not initialized account"
         assert start<self.end_date,"Range error"
         dt=datetime.timedelta(days=1)
 
@@ -382,9 +389,8 @@ returns a transaction object, filled with the proper information"""
             ret.start_account=ret.start_account-i.amount
         return ret
 
-    def cut_notalfter(self, end):
+    def cut_notafter(self, end):
         assert self.initialized,"Not initialized account"
-        assert t.initialized,"Not initialized account"
         assert end>=self.start_date,"Range error"
         dt=datetime.timedelta(days=1)
 
@@ -416,7 +422,6 @@ returns a transaction object, filled with the proper information"""
         assert (self.end_date>t.start_date or t.end_date>self.start_date),"Non-intersecting ranges"
 
         if self.end_date>t.start_date:
-            ret=self.cut_before(t.start_date)
             assert ret.end_account==t.start_account,"Non matching accounts"
             ret.movements=ret.movements+t.movements
             ret.end_date=t.end_date
@@ -504,11 +509,11 @@ def main(arg,environ):
             if t2.end_date>=t.end_date:
                 print("No newer information is provided. Quitting...", file=sys.stderr)
                 return 0
-            if t2.end_date<=t.begin_date:
+            if t2.end_date<=t.start_date:
                 print("Error: provided data do not intersect current database", file=sys.stderr)
                 return 1
 
-            t3=t.join(t2)
+            t3=t2.join(t)
 
             os.rename(data_file,data_dir+"/db."+date_str+".json")
 
