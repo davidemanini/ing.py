@@ -13,8 +13,6 @@ def itastr2amount(s):
         rem=int(a[1])
         if len(a[1])==1:
             rem=rem*10
-
-        
         if ret<0:
             ret=ret-int(a[1])
         else:
@@ -26,164 +24,16 @@ def engstr2amount(s):
 
     # maybe there's a swap function ...
     return itastr2amount((s.replace(',','')).replace('.',','))
-    
-def line_split(line):
-    a=(line[1:-2]).split('","')
-    return a[0:4]+[a[4][2:]]
+
 
 class LineError(Exception):
-    def __init__(self, arg, info):
-        self.args = arg
-        self.info = info
+    def __init__(self, line):
+        self.line = line
 
-class LineSyntaxError(Exception):
-    def __init__(self, arg):
-        self.args = arg
+    def __str__(self):
+        return "LineError: "+self.line
 
 
-
-def process_line(a):
-
-    reason_char='\'\\(\\)A-Za-z0-9 .,-'
-    
-    information={}
-    information["date1"]=datetime.date(int(a[0][6:]),int(a[0][3:5]),int(a[0][0:2]))
-    information["date2"]=datetime.date(int(a[1][6:]),int(a[1][3:5]),int(a[1][0:2]))
-    information["amount"]=itastr2amount(a[4])
-    
-    method=a[2]
-
-    try:
-
-        if method=="PAGAMENTO CARTA":
-            time_info=re.search(" alle ore ([0-9]+):([0-9]+)",a[3])
-            information["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
-            information["currency"]=re.search(" Div=([A-Z]+) ",a[3])[1]
-            information["amount_currency"]=-engstr2amount(re.search(" Importo in divisa=([0-9.,]+) ",a[3])[1])
-            if re.search(" - Transazione C-less$",a[3]):
-                information["contactless"]=1
-                information["correspondent_name"]=re.search(" presso ([A-Za-z0-9. ]+) - Transazione C-less$",a[3])[1]
-            else:
-                information["correspondent_name"]=re.search(" presso ([A-Za-z0-9. ]+)",a[3])[1]
-
-            information["method"]="card"
-
-        elif method=="PRELIEVO CARTA":
-            time_info=re.search(" alle ore ([0-9]+):([0-9]+)",a[3])
-            information["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
-            information["currency"]=re.search(" Div=([A-Z]+) ",a[3])[1]
-            information["amount_currency"]=-engstr2amount(re.search(" Importo in divisa=([0-9.,]+) ",a[3])[1])
-            information["place"]=re.search(" presso ([A-Za-z0-9. ]+)",a[3])[1]
-
-            information["method"]="cash_withdrawal"
-    
-        elif method=="ACCR. STIPENDIO-PENSIONE":
-            information["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",a[3])[1]
-            information["correspondent_id"]=re.search("Codifica Ordinante ([A-Z0-9]+)",a[3])[1]
-            information["correspondent_name"]=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",a[3])[1]
-            information["reason"]=re.search("Note: (["+reason_char+"]+)$",a[3])[1]
-
-            information["method"]="wage"
-
-        elif method=="ACCREDITO BONIFICO":
-            information["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",a[3])[1]
-            information["correspondent_id"]=re.search("Codifica Ordinante ([A-Z0-9]+)",a[3])[1]
-            information["correspondent_name"]=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",a[3])[1]
-            information["reason"]=re.search("Note: (["+reason_char+"]+)$",a[3])[1]
-                
-            information["method"]="incoming_transfer"
-
-        elif method=="VS.DISPOSIZIONE":
-            if re.search("^BONIFICO DA VOI DISPOSTO NOP",a[3]):
-        
-                information["transaction_id"]=re.search("^BONIFICO DA VOI DISPOSTO NOP ([A-Za-z0-9]+)",a[3])[1]
-                information["correspondent_id"]=re.search(" A FAVORE DI ([A-Za-z0-9. ]+) C. BENEF. ([A-Z0-9]+) NOTE:",a[3])[2]
-                information["correspondent_name"]=re.search(" A FAVORE DI ([A-Za-z0-9. ]+) C. BENEF. ([A-Z0-9]+) NOTE:",a[3])[1]
-                information["reason"]=re.search(" NOTE: (["+reason_char+"]+)$",a[3])[1]
-                
-                information["method"]="incoming_transfer"
-            
-            else:
-                information["description"]=a[2]+' '+a[3]
-                information["method"]="other"
-                raise LineError(a,information)
-
-        elif method=="PAGAMENTI DIVERSI":
-            if re.search("Addebito SDD CORE",a[3]):
-            
-                information["correspondent_id"]=re.search("Creditor id\\. ([A-Z0-9]+)",a[3])[1]
-                information["correspondent_name"]=re.search("Creditor id\\. ([A-Z0-9]+) (["+reason_char+"]+) Id Mandato ",a[3])[2]
-                tr=re.search(" Rif\\. ([0-9A-Z-]+)$",a[3])
-                if tr:
-                    information["transaction_id"]=tr[1]
-                    information["reason"]=re.search("Id Mandato ([0-9A-Za-z-]+) Debitore",a[3])[1]
-            
-                information["method"]="sdd"
-
-            else:
-                information["description"]=a[2]+' '+a[3]
-                information["method"]="other"
-                raise LineError(a,information)
-
-        elif method=="BOLLI GOVERNATIVI":
-            information["method"]="bolli_governativi"
-            information["description"]="bolli_governativi"
-
-        elif method=="Canone servizio SMS OTP":
-            information["method"]="sms_otp"
-            information["description"]="sms_otp"
-            
-
-        else:
-            information["description"]=a[2]+' '+a[3]
-            information["method"]="other"
-            raise LineError(a,information)
-
-    except LineError as e:
-        raise 
-    except:
-        raise LineSyntaxError(a)
-
-        
-    return information
-
-
-def csv2transaction_list(filename):
-    f=open(filename)
-    f.readline()
-    line=f.readline()
-
-    tr=[]
-    while line!='' and line!=',,,,\n':
-        a=line_split(line)
-        info=process_line(a)
-        tr.append(info)
-        line=f.readline()
-
-    f.close()
-    
-    return tr
-
-
-
-def xls2transaction_list(filename):
-
-# dangerous... potantially a 1TB file may break everithing...
-    ff=open(filename)
-    f=ff.read()
-    ff.close()
-
-    tr=[]
-    
-    for i in re.findall("""<tr><td border="1">(.+?)</tr>""",f):
-        line=re.search("""([0-9/]+)</td><td border="1">([0-9/]+)</td><td border="1">(.+)</td><td border="1">(.+)</td><td class="excelCurrency" border="1">&euro; ([-+0-9,.]+)</td>""",i)
-        a=[line[1], line[2], line[3], line[4], line[5]]
-        info=process_line(a)
-        tr.append(info)
-       
-
-    
-    return tr
 
 
 
@@ -192,28 +42,20 @@ class _jencoder(json.JSONEncoder):
     def default(self, obj):
         dateft="%Y-%m-%d"
         timeft="%H:%M:%S"
-        if isinstance(obj, Transactions.Movement):
-            data = {  "__Movement__": True,
-                      "date_account": obj.date_account,
-                      "date_available": obj.date_available,
-                      "amount": obj.amount,
-                      "method": obj.method,
-                      "correspondent_name": obj.correspondent_name,
-                      "correspondent_id": obj.correspondent_id,
-                      "information": obj.information }
+        if isinstance(obj, Account.Movement):
+            data = {  "__Movement__": True}
+            for i in obj.items():
+                data[i]=obj.__getattribute__(i)
             return data
 
-        if isinstance(obj, Transactions):
+        if isinstance(obj, Account):
             if not obj.initialized:
                 return None
-            data = { "__Transactions__": True,
-                     "start_date": obj.start_date,
-                     "end_date": obj.end_date,
-                     "account_number": obj.account_number,
-                     "iban": obj.iban,
-                     "end_account": obj.end_account,
-                     "start_account": obj.start_account,
-                     "movements": obj.movements }
+            data = { "__Account__": True}
+            for i in obj.items():
+                if i=="initialized":
+                    continue
+                data[i]=obj.__getattribute__(i)
             return data
 
         if isinstance(obj,datetime.time):
@@ -229,14 +71,15 @@ class _jencoder(json.JSONEncoder):
 
 
 
-class Transactions:
-    def __inif__(self):
+class Account:
+    def __init__(self):
         self.initialized=False
 
 
     class Movement:
         def __init__(self):
             pass
+
 
         def load_xls_line(line):
             l=re.search("""([0-9/]+)</td><td border="1">([0-9/]+)</td><td border="1">(.+)</td><td border="1">(.+)</td><td class="excelCurrency" border="1">&euro; ([-+0-9,.]+)</td>""",line)
@@ -248,113 +91,103 @@ class Transactions:
 
             reason_char='\'\\(\\)A-Za-z0-9 .,-'
 
-            m=Transactions.Movement()
-            
+            m=Account.Movement()
+
             m.date_account=datetime.date(int(date_account[6:]),int(date_account[3:5]),int(date_account[0:2]))
             m.date_available=datetime.date(int(date_available[6:]),int(date_available[3:5]),int(date_available[0:2]))
             m.amount=itastr2amount(amount_str)
 
-            m.information={}
+            m.details={}
             m.correspondent_name=None
             m.correspondent_id=None
-    
 
-            try:
 
-                if method=="PAGAMENTO CARTA":
-                    time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
-                    m.information["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
-                    m.method="card"
-                    if re.search("Tasso di cambio",description):
-                        currency_info=re.search(" presso ([A-Za-z0-9. ]+)Tasso di cambio ([A-Z]+)/([A-Z]+)=([-+0-9,]+)$",description)
-                        m.correspondent_name=currency_info[1]
-                        m.information["currency"]=currency_info[2]
-                        m.information["exchange_rate"]=float(re.sub(",",".",currency_info[4]))
-                        m.information["amount_currency"]=-engstr2amount(re.search(" Importo in divisa=([0-9.,]+) ",description)[1])
-                        
-                    elif re.search(" - Transazione C-less$",description):
-                        m.information["contactless"]=True
-                        m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+) - Transazione C-less$",description)[1]
-                    else:
-                        m.information["contactless"]=False
-                        m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
 
-                elif method=="PRELIEVO CARTA":
-                    time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
-                    m.information["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
-                    c=re.search(" Div=([A-Z]+) ",description)[1]
-                    if c!="EUR":
-                        m.information["currency"]=c
-                        m.information["amount_currency"]=-engstr2amount(re.search(" Importo in divisa=([0-9.,]+) ",description)[1])
-                        
-                    m.information["place"]=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
+            if method=="PAGAMENTO CARTA":
+                time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
+                m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
+                m.method="card"
+                if re.search("Tasso di cambio",description):
+                    currency_info=re.search(" presso ([A-Za-z0-9. ]+)Tasso di cambio ([A-Z]+)/([A-Z]+)=([-+0-9,]+)$",description)
+                    m.correspondent_name=currency_info[1]
+                    m.details["currency"]=currency_info[2]
+                    m.details["exchange_rate"]=float(re.sub(",",".",currency_info[4]))
+                    m.details["amount_currency"]=-engstr2amount(re.search(" Importo in divisa=([0-9.,]+) ",description)[1])
 
-                    m.method="cash_withdrawal"
-    
-                elif method=="ACCR. STIPENDIO-PENSIONE":
-                    m.information["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
-                    m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
-                    m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
-                    m.information["reason"]=re.search("Note: (["+reason_char+"]+)$",description)[1]
+                elif re.search(" - Transazione C-less$",description):
+                    m.details["contactless"]=True
+                    m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+) - Transazione C-less$",description)[1]
+                else:
+                    m.details["contactless"]=False
+                    m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
 
-                    m.method="wage"
+            elif method=="PRELIEVO CARTA":
+                time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
+                m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
+                c=re.search(" Div=([A-Z]+) ",description)[1]
+                if c!="EUR":
+                    m.details["currency"]=c
+                    m.details["amount_currency"]=-engstr2amount(re.search(" Importo in divisa=([0-9.,]+) ",description)[1])
 
-                elif method=="ACCREDITO BONIFICO":
-                    m.information["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
-                    m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
-                    m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
-                    m.information["reason"]=re.search("Note: (["+reason_char+"]+)$",description)[1]
-                
+                m.details["place"]=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
+
+                m.method="cash_withdrawal"
+
+            elif method=="ACCR. STIPENDIO-PENSIONE":
+                m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
+                m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
+                m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
+                m.details["reason"]=re.search("Note: (["+reason_char+"]+)$",description)[1]
+
+                m.method="wage"
+
+            elif method=="ACCREDITO BONIFICO":
+                m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
+                m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
+                m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
+                m.details["reason"]=re.search("Note: (["+reason_char+"]+)$",description)[1]
+
+                m.method="incoming_transfer"
+
+            elif method=="VS.DISPOSIZIONE":
+                if re.search("^BONIFICO DA VOI DISPOSTO NOP",description):
+
+                    m.details["transaction_id"]=re.search("^BONIFICO DA VOI DISPOSTO NOP ([A-Za-z0-9]+)",description)[1]
+                    m.correspondent_id=re.search(" A FAVORE DI ([A-Za-z0-9. ]+) C. BENEF. ([A-Z0-9]+) NOTE:",description)[2]
+                    m.correspondent_name=re.search(" A FAVORE DI ([A-Za-z0-9. ]+) C. BENEF. ([A-Z0-9]+) NOTE:",description)[1]
+                    m.details["reason"]=re.search(" NOTE: (["+reason_char+"]+)$",description)[1]
+
                     m.method="incoming_transfer"
 
-                elif method=="VS.DISPOSIZIONE":
-                    if re.search("^BONIFICO DA VOI DISPOSTO NOP",description):
-        
-                        m.information["transaction_id"]=re.search("^BONIFICO DA VOI DISPOSTO NOP ([A-Za-z0-9]+)",description)[1]
-                        m.correspondent_id=re.search(" A FAVORE DI ([A-Za-z0-9. ]+) C. BENEF. ([A-Z0-9]+) NOTE:",description)[2]
-                        m.correspondent_name=re.search(" A FAVORE DI ([A-Za-z0-9. ]+) C. BENEF. ([A-Z0-9]+) NOTE:",description)[1]
-                        m.information["reason"]=re.search(" NOTE: (["+reason_char+"]+)$",description)[1]
-                
-                        m.method="incoming_transfer"
-            
-                    else:
-                        information["description"]=reason+' '+description
-                        m.method="other"
-                        raise LineError(a,information)
+                else:
+                    raise LineError(a)
 
-                elif method=="PAGAMENTI DIVERSI":
-                    if re.search("Addebito SDD CORE",description):
-            
-                        m.correspondent_id=re.search("Creditor id\\. ([A-Z0-9]+)",description)[1]
-                        m.correspondent_name=re.search("Creditor id\\. ([A-Z0-9]+) (["+reason_char+"]+) Id Mandato ",description)[2]
-                        tr=re.search(" Rif\\. ([0-9A-Z-]+)$",description)
-                        if tr:
-                            m.information["transaction_id"]=tr[1]
-                        m.information["reason"]=re.search("Id Mandato ([0-9A-Za-z-]+) Debitore",description)[1]
-            
-                        m.method="sdd"
+            elif method=="PAGAMENTI DIVERSI":
+                if re.search("Addebito SDD CORE",description):
 
-                    else:
-                        m.information["description"]=reason+' '+description
-                        m.method="other"
-                        raise LineError(a,m.information)
+                    m.correspondent_id=re.search("Creditor id\\. ([A-Z0-9]+)",description)[1]
+                    m.correspondent_name=re.search("Creditor id\\. ([A-Z0-9]+) (["+reason_char+"]+) Id Mandato ",description)[2]
+                    tr=re.search(" Rif\\. ([0-9A-Z-]+)$",description)
+                    if tr:
+                        m.details["transaction_id"]=tr[1]
+                    m.details["reason"]=re.search("Id Mandato ([0-9A-Za-z-]+) Debitore",description)[1]
 
-                elif method=="BOLLI GOVERNATIVI":
-                    m.method="bolli_governativi"
-                    m.information["description"]="bolli_governativi"
-
-                elif method=="Canone servizio SMS OTP":
-                    m.method="sms_otp"
-                    m.information["description"]="sms_otp"
-            
+                    m.method="sdd"
 
                 else:
-                    m.information["description"]=reason+' '+description
-                    m.method="other"
-                    raise LineError(a,information)
+                    raise LineError(a)
 
-            except:
-                raise
+            elif method=="BOLLI GOVERNATIVI":
+                m.method="bolli_governativi"
+                m.details["description"]="bolli_governativi"
+
+            elif method=="Canone servizio SMS OTP":
+                m.method="sms_otp"
+                m.details["description"]="sms_otp"
+
+            else:
+                raise LineError(a)
+
 
             return m
 
@@ -370,15 +203,12 @@ class Transactions:
         def __ge__(self,obj):
             return (self.date_account >= obj.date_account)
 
-                         
-        
-        
 
     def load_xls(string):
-        """Consider string as an xls file downloded from the ING website and then 
+        """Consider string as an xls file downloded from the ING website and then
 returns a transaction object, filled with the proper information"""
 
-        t=Transactions()
+        t=Account()
         interval=re.search("""Nella tabella vedi elencate le operazioni dal ([0-9]+)/([0-9]+)/([0-9]+) al ([0-9]+)/([0-9]+)/([0-9]+)</td>""",string)
         t.start_date=datetime.date(int(interval[3]),int(interval[2]),int(interval[1]))
         t.end_date=datetime.date(int(interval[6]),int(interval[5]),int(interval[4]))
@@ -391,7 +221,7 @@ returns a transaction object, filled with the proper information"""
         t.start_account=t.end_account
 
         for i in re.findall("""<tr><td border="1">(.+?)</tr>""",string):
-            m=Transactions.Movement.load_xls_line(i)
+            m=Account.Movement.load_xls_line(i)
             t.movements.append(m)
             t.start_account=t.start_account-m.amount
 
@@ -406,9 +236,9 @@ returns a transaction object, filled with the proper information"""
                 if "time" in i:
                     return datetime.time.fromisoformat(j)
                 return j
-            
+
             if "__Movement__" in obj:
-                m=Transactions.Movement()
+                m=Account.Movement()
                 for i,j in obj.items():
                     if i=="__Movement__":
                         continue
@@ -416,10 +246,10 @@ returns a transaction object, filled with the proper information"""
 
                 return m
 
-            if "__Transactions__" in obj:
-                t=Transactions()
+            if "__Account__" in obj:
+                t=Account()
                 for i,j in obj.items():
-                    if i=="__Movement__":
+                    if i=="__Account__":
                         continue
                     t.__setattr__(i,datetime_parser(i,j))
 
@@ -432,12 +262,16 @@ returns a transaction object, filled with the proper information"""
             return obj
 
         return json.loads(string,object_hook=decoder)
-        
+
     def dump_json(self, indent=4):
+        if not self.initialized:
+            return json.dumps(None, indent=indent)
         return json.dumps(self,cls=_jencoder, indent=indent)
 
-    
+
     def daily_amount(self, start=None, end=None):
+        assert self.initialized,"Not initialized account"
+        assert t.initialized,"Not initialized account"
         dt=datetime.timedelta(days=1)
         if start==None:
             start=self.start_date
@@ -448,7 +282,7 @@ returns a transaction object, filled with the proper information"""
         assert start<=end,"End is before start"
         assert (start>=self.start_date and end<=self.end_date),"Range error"
 #            raise RangeError
-        
+
         t=self.start_date
         current_amount=self.start_account
         ret=[]
@@ -460,7 +294,7 @@ returns a transaction object, filled with the proper information"""
                     ret.append((t,current_amount))
 
                 t=t+dt
-                
+
             current_amount=current_amount+i.amount
 
         while t<=end:
@@ -470,17 +304,19 @@ returns a transaction object, filled with the proper information"""
         return ret
 
     def cut_before(self, end):
+        assert self.initialized,"Not initialized account"
+        assert t.initialized,"Not initialized account"
         assert end>self.start_date,"Range error"
         dt=datetime.timedelta(days=1)
 
         end=min(end, self.end_date+dt)
-        
-        ret=Transactions()
+
+        ret=Account()
         ret.iban=self.iban
         ret.account_number=self.account_number
         ret.start_date=self.start_date
         ret.start_account=self.start_account
-        
+
         ret.movements=[]
         ret.end_date=end-dt
         ret.end_account=ret.start_account
@@ -492,20 +328,22 @@ returns a transaction object, filled with the proper information"""
             ret.movements.append(i)
             ret.end_account=ret.end_account+i.amount
         return ret
-                
+
 
     def cut_notbefore(self, start):
+        assert self.initialized,"Not initialized account"
+        assert t.initialized,"Not initialized account"
         assert start<=self.end_date,"Range error"
         dt=datetime.timedelta(days=1)
 
         start=max(start, self.start_date)
-        
-        ret=Transactions()
+
+        ret=Account()
         ret.iban=self.iban
         ret.account_number=self.account_number
         ret.end_date=self.end_date
         ret.end_account=self.end_account
-        
+
         ret.movements=[]
         ret.start_date=start
         ret.start_account=ret.end_account
@@ -517,12 +355,64 @@ returns a transaction object, filled with the proper information"""
             ret.movements.append(i)
             ret.start_account=ret.start_account-i.amount
         return ret
-                
+
+    def cut_after(self, start):
+        assert self.initialized,"Not initialized account"
+        assert t.initialized,"Not initialized account"
+        assert start<self.end_date,"Range error"
+        dt=datetime.timedelta(days=1)
+
+        start=max(start, self.start_date-dt)
+
+        ret=Account()
+        ret.iban=self.iban
+        ret.account_number=self.account_number
+        ret.end_date=self.end_date
+        ret.end_account=self.end_account
+
+        ret.movements=[]
+        ret.start_date=start+dt
+        ret.start_account=ret.end_account
+
+        ret.initialized=True
+        for i in sorted(self.movements, reverse=True):
+            if i.date_account<=start:
+                return ret
+            ret.movements.append(i)
+            ret.start_account=ret.start_account-i.amount
+        return ret
+
+    def cut_notalfter(self, end):
+        assert self.initialized,"Not initialized account"
+        assert t.initialized,"Not initialized account"
+        assert end>=self.start_date,"Range error"
+        dt=datetime.timedelta(days=1)
+
+        end=min(end, self.end_date)
+
+        ret=Account()
+        ret.iban=self.iban
+        ret.account_number=self.account_number
+        ret.start_date=self.start_date
+        ret.start_account=self.start_account
+
+        ret.movements=[]
+        ret.end_date=end
+        ret.end_account=ret.start_account
+
+        ret.initialized=True
+        for i in sorted(self.movements):
+            if i.date_account>end:
+                return ret
+            ret.movements.append(i)
+            ret.end_account=ret.end_account+i.amount
+        return ret
 
 
-    
+
+
     def join(self,t):
-        assert (self.account_number==t.account_number or self.iban==t.iban),"Transactions belonging to different accounts"
+        assert (self.account_number==t.account_number or self.iban==t.iban),"Account belonging to different accounts"
         assert (self.end_date>t.start_date or t.end_date>self.start_date),"Non-intersecting ranges"
 
         if self.end_date>t.start_date:
@@ -538,10 +428,10 @@ returns a transaction object, filled with the proper information"""
         for i in self.movements:
             a=a+i.amount
         return a
-    
-        
-    
-    
+
+
+
+
 
 
 
@@ -549,15 +439,20 @@ returns a transaction object, filled with the proper information"""
 
 def main(arg,environ):
     import argparse
-    
-    
+
+
     parser = argparse.ArgumentParser(description='Analize ING-generated bank account data.')
 
-    
+
     parser.add_argument('--input', dest='input_file', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument('--output', dest='output_file', type=argparse.FileType('w'), default=sys.stdout)
-    parser.add_argument('--data-dir', dest='data_dir', type=str, default=environ['ING_DATADIR'])
-#    parser.add_argument('--from-date', '-f', nargs=1, default='1900-01-01', 
+    parser.add_argument('--data-dir', dest='data_dir', type=str, default=environ['HOME']+"/.ing")
+
+    parser.add_argument('--before',type=datetime.date.fromisoformat, default=None)
+    parser.add_argument('--after',type=datetime.date.fromisoformat, default=None)
+    parser.add_argument('--not-after',type=datetime.date.fromisoformat, default=None)
+    parser.add_argument('--not-before',type=datetime.date.fromisoformat, default=None)
+
     action = parser.add_mutually_exclusive_group()
     action.add_argument('--to-json', action='store_true')
     action.add_argument('--add-to-db', action='store_true')
@@ -567,13 +462,25 @@ def main(arg,environ):
 
     data_dir=a.data_dir
 
-    decoder=Transactions.load_json
+    def cutter(t):
+        ret=t
+        if a.before:
+            ret=ret.cut_before(a.before)
+        if a.after:
+            ret=ret.cut_after(a.after)
+        if a.not_before:
+            ret=ret.cut_notbefore(a.not_before)
+        if a.not_after:
+            ret=ret.cut_notafter(a.not_after)
+        return ret
+
+    decoder=Account.load_json
     if a.input_file.name[-3:]=="xls":
-        decoder=Transactions.load_xls
+        decoder=Account.load_xls
     if a.to_json:
         string=a.input_file.read()
         a.input_file.close()
-        
+
         t=decoder(string)
         a.output_file.write(t.dump_json())
         a.output_file.close()
@@ -593,14 +500,14 @@ def main(arg,environ):
             f=open(data_file,"r")
             string=f.read()
             f.close()
-            t2=Transactions.load_json(string)
+            t2=Account.load_json(string)
             if t2.end_date>=t.end_date:
                 print("No newer information is provided. Quitting...", file=sys.stderr)
                 return 0
             if t2.end_date<=t.begin_date:
                 print("Error: provided data do not intersect current database", file=sys.stderr)
                 return 1
-            
+
             t3=t.join(t2)
 
             os.rename(data_file,data_dir+"/db."+date_str+".json")
@@ -617,7 +524,7 @@ def main(arg,environ):
         f.write(s)
         f.close()
         return 0
-            
+
     elif a.daily_amount:
         string=a.input_file.read()
         a.input_file.close()
