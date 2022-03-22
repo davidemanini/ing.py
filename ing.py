@@ -10,19 +10,6 @@ def itastr2amount(s):
     a=s.replace('.','').replace(',','.')
     return int(100*float(a))
 
-def itastr2amount_old(s):
-    a=s.replace('.','').split(',')
-    ret=100*int(a[0])
-    if len(a)==2 and len(a[1])>0:
-        rem=int(a[1])
-        if len(a[1])==1:
-            rem=rem*10
-        if ret<0:
-            ret=ret-int(a[1])
-        else:
-            ret=ret+int(a[1])
-
-    return ret
 
 def engstr2amount(s):
 
@@ -418,15 +405,19 @@ returns a transaction object, filled with the proper information"""
 
 
     def join(self,t):
-        assert (self.account_number==t.account_number or self.iban==t.iban),"Account belonging to different accounts"
+        assert (self.account_number==t.account_number and self.iban==t.iban),"Different accounts"
         assert (self.end_date>t.start_date or t.end_date>self.start_date),"Non-intersecting ranges"
 
         if self.end_date>t.start_date:
+            ret=self.cut_before(t.start_date)
+            # The following assertion should never be false!
             assert ret.end_account==t.start_account,"Non matching accounts"
             ret.movements=ret.movements+t.movements
             ret.end_date=t.end_date
             ret.end_account=t.end_account
             return ret
+
+        return t.join(self)
 
     def check_amount(self):
         a=self.start_account-self.end_account
