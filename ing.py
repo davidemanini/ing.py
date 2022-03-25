@@ -5,6 +5,7 @@ import sys
 import datetime
 import time
 import json
+import os
 
 def itastr2amount(s):
     a=s.replace('.','').replace(',','.')
@@ -426,6 +427,56 @@ returns a transaction object, filled with the proper information"""
         return a
 
 
+def load_db(data_dir=None):
+    if data_dir==None:
+        data_dir=os.environ['HOME']+'/.ing'
+    data_file=data_dir+"/db.json"
+    f=open(data_file,"r")
+    string=f.read()
+    f.close()
+    db=Account.load_json(string)
+    assert db.initialized, "The database file "+data_file+" is not initialized"
+    return db
+
+
+def add_to_db(t,s=None,data_dir=None):
+    assert t.initialized,"Account must be initialized"
+    if data_dir==None:
+        data_dir=os.environ['HOME']+'/.ing'
+    date_str=datetime.datetime.today().strftime("%Y-%M-%dT%H:%m:%S")
+    if not os.path.isdir(data_dir):
+        os.mkdir(data_dir)
+        print("Created data directory "+data_dir+".", file=sys.stderr)
+
+    data_file=data_dir+"/db.json"
+    if os.path.isfile(data_file):
+        f=open(data_file,"r")
+        string=f.read()
+        f.close()
+        db=Account.load_json(string)
+        assert db.initialized, "The database file "+data_file+" is not initialized"
+
+        if db.end_date>=t.end_date:
+            print("No newer information is provided. Quitting...", file=sys.stderr)
+            return 0
+        assert db.end_date>t.start_date,"Error: provided data do not intersect current database"
+
+        new_db=db.join(t)
+
+        os.rename(data_file,data_dir+"/db."+date_str+".json")
+
+        f=open(data_file,"w")
+        f.write(new_db.dump_json())
+        f.close()
+    else:
+        f=open(data_file,"w")
+        f.write(t.dump_json())
+        f.close()
+
+    if s is not None:
+        f=open(data_dir+"/"+date_str+".xls","w")
+        f.write(s)
+        f.close()
 
 
 
@@ -433,16 +484,16 @@ returns a transaction object, filled with the proper information"""
 
 
 
-def main(arg,environ):
+def main(arg,environ=os.environ):
     import argparse
 
 
     parser = argparse.ArgumentParser(description='Analize ING-generated bank account data.')
 
 
-    parser.add_argument('--input', dest='input_file', type=argparse.FileType('r'), default=sys.stdin)
+    parser.add_argument('--input', dest='input_file', type=argparse.FileType('r'), default=None)
     parser.add_argument('--output', dest='output_file', type=argparse.FileType('w'), default=sys.stdout)
-    parser.add_argument('--data-dir', dest='data_dir', type=str, default=environ['HOME']+"/.ing")
+    parser.add_argument('--data-dir', dest='data_dir', type=str, default=None)
 
     parser.add_argument('--before',type=datetime.date.fromisoformat, default=None)
     parser.add_argument('--after',type=datetime.date.fromisoformat, default=None)
@@ -456,7 +507,10 @@ def main(arg,environ):
     action.add_argument('--plot-amount', action='store_true')
     a = parser.parse_args(arg)
 
-    data_dir=a.data_dir
+    if a.data_dir==None:
+        data_dir=environ['HOME']+'/.ing'
+    else:
+        data_dir=a.data_dir
 
     def cutter(t):
         ret=t
@@ -470,6 +524,13 @@ def main(arg,environ):
             ret=ret.cut_notafter(a.not_after)
         return ret
 
+    if a.input_file is None:
+        try:
+            a.input_file=open(data_dir+"/db.json","r")
+        except FileNotFoundError:
+            print("You must provide an input file (the database is not initialized).",file=sys.stderr)
+            return 1
+
     decoder=Account.load_json
     if a.input_file.name[-3:]=="xls":
         decoder=Account.load_xls
@@ -477,59 +538,43 @@ def main(arg,environ):
         string=a.input_file.read()
         a.input_file.close()
 
-        t=decoder(string)
+        t=cutter(decoder(string))
         a.output_file.write(t.dump_json())
         a.output_file.close()
         return 0
     elif a.add_to_db:
-        date_str=datetime.datetime.today().strftime("%Y-%M-%dT%H:%m:%S")
-        import os
-        if not os.path.isdir(data_dir):
-            os.mkdir(data_dir)
-            print("Created data directory "+data_dir+".", file=sys.stderr)
-
-        data_file=data_dir+"/db.json"
-        s=a.input_file.read()
-        a.input_file.close()
-        t=decoder(s)
-        if os.path.isfile(data_file):
-            f=open(data_file,"r")
-            string=f.read()
-            f.close()
-            t2=Account.load_json(string)
-            if t2.end_date>=t.end_date:
-                print("No newer information is provided. Quitting...", file=sys.stderr)
-                return 0
-            if t2.end_date<=t.start_date:
-                print("Error: provided data do not intersect current database", file=sys.stderr)
-                return 1
-
-            t3=t2.join(t)
-
-            os.rename(data_file,data_dir+"/db."+date_str+".json")
-
-            f=open(data_file,"w")
-            f.write(t3.dump_json())
-            f.close()
-        else:
-            f=open(data_file,"w")
-            f.write(t.dump_json())
-            f.close()
-
-        f=open(data_dir+"/"+date_str+".xls","w")
-        f.write(s)
-        f.close()
+        if a.input_file.name==data_dir+"/db.json":
+            print("Error: an input file must be specified.",file=sys.stderr)
+            return 1
+        try:
+            string=a.input_file.read()
+            a.input_file.close()
+        except OSError as e:
+            print(e, file=sys.stderr)
+            return 1
+        try:
+            t=cutter(decoder(string))
+            if a.input_file.name[-3:]=="xls":
+                add_to_db(t,string,data_dir)
+            else:
+                add_to_db(t,None,data_dir)
+        except OSError as e:
+            print(e, file=sys.stderr)
+            return 1
+        except Exception as e:
+            print(e, file=sys.stderr)
+            raise
         return 0
 
     elif a.daily_amount:
         string=a.input_file.read()
         a.input_file.close()
 
-        t=decoder(string)
+        t=cutter(decoder(string))
         daily_amount=t.daily_amount()
         print("date,amount",file=a.output_file)
         for i in daily_amount:
-            print(str(i[0])+","+str(i[1]),file=a.output_file)
+            print(str(i[0])+",%.2f"%(i[1]/100),file=a.output_file)
 
         a.output_file.close()
         return 0
@@ -538,7 +583,7 @@ def main(arg,environ):
         string=a.input_file.read()
         a.input_file.close()
 
-        t=decoder(string)
+        t=cutter(decoder(string))
         daily_amount=t.daily_amount()
 
         x=[i[0] for i in daily_amount]
