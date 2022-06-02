@@ -443,7 +443,7 @@ def add_to_db(t,s=None,data_dir=None):
     assert t.initialized,"Account must be initialized"
     if data_dir==None:
         data_dir=os.environ['HOME']+'/.ing'
-    date_str=datetime.datetime.today().strftime("%Y-%M-%dT%H:%m:%S")
+    date_str=datetime.datetime.today().strftime("%Y-%m-%dT%H:%M:%S")
     if not os.path.isdir(data_dir):
         os.mkdir(data_dir)
         print("Created data directory "+data_dir+".", file=sys.stderr)
