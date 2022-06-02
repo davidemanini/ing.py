@@ -410,12 +410,14 @@ returns a transaction object, filled with the proper information"""
         assert (self.end_date>t.start_date or t.end_date>self.start_date),"Non-intersecting ranges"
 
         if self.end_date>t.start_date:
-            ret=self.cut_before(t.start_date)
+            cut_date=t.start_date+(self.end_date-t.start_date)/2
+            ret=self.cut_before(cut_date)
+            t2=t.cut_notbefore(cut_date)
             # The following assertion should never be false!
-            assert ret.end_account==t.start_account,"Non matching accounts"
-            ret.movements=ret.movements+t.movements
-            ret.end_date=t.end_date
-            ret.end_account=t.end_account
+            assert ret.end_account==t2.start_account,"Non matching accounts.  Please report this error"
+            ret.movements=ret.movements+t2.movements
+            ret.end_date=t2.end_date
+            ret.end_account=t2.end_account
             return ret
 
         return t.join(self)
