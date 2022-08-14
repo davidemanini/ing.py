@@ -9,7 +9,7 @@ import os
 
 def itastr2amount(s):
     a=s.replace('.','').replace(',','.')
-    return int(100*float(a))
+    return round(100*float(a))
 
 
 def engstr2amount(s):
@@ -114,7 +114,7 @@ class Account:
 
                 elif re.search(" - Transazione C-less$",description):
                     m.details["contactless"]=True
-                    m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+) - Transazione C-less$",description)[1]
+                    m.correspondent_name=re.search(" presso ([A-Za-z0-9. \\*\\&\\']+) - Transazione C-less$",description)[1]
                 else:
                     m.details["contactless"]=False
                     m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
