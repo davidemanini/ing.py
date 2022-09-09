@@ -114,7 +114,7 @@ class Account:
 
                 elif re.search(" - Transazione C-less$",description):
                     m.details["contactless"]=True
-                    m.correspondent_name=re.search(" presso ([A-Za-z0-9. \\*\\&\\']+) - Transazione C-less$",description)[1]
+                    m.correspondent_name=re.search(" presso ([A-Za-z0-9. \\*\\&\\'-]+) - Transazione C-less$",description)[1]
                 else:
                     m.details["contactless"]=False
                     m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
@@ -143,7 +143,7 @@ class Account:
                 m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
                 m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
                 m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
-                m.details["reason"]=re.search("Note: (["+reason_char+"]+)$",description)[1]
+                m.details["reason"]=re.search("Note: (["+reason_char+"]*)$",description)[1]
 
                 m.method="incoming_transfer"
 
@@ -158,7 +158,7 @@ class Account:
                     m.method="incoming_transfer"
 
                 else:
-                    raise LineError(a)
+                    raise LineError(line)
 
             elif method=="PAGAMENTI DIVERSI":
                 if re.search("Addebito SDD CORE",description):
@@ -172,8 +172,15 @@ class Account:
 
                     m.method="sdd"
 
+                elif re.search("Pagamento CBILL  PAGO PA",description):
+                    m.method="cbill"
+                    m.correspondent_name=re.search("Pagamento CBILL  PAGO PA a favore di ([A-Za-z0-9. ]+) di importo",description)[1]
+                    m.details["transaction_id"]=re.search("Identificativo transazione ([0-9]+), Numero bolletta",description)[1]
+                    m.details["reason_id"]=re.search("Numero bolletta ([0-9]+) Commissione azienda",description)[1]
+                    m.details["reason"]=re.search("euro. CAUSALE: (["+reason_char+"]+)",description)[1]
+
                 else:
-                    raise LineError(a)
+                    raise LineError(line)
 
             elif method=="BOLLI GOVERNATIVI":
                 m.method="bolli_governativi"
@@ -183,8 +190,12 @@ class Account:
                 m.method="sms_otp"
                 m.details["description"]="sms_otp"
 
+            elif method=="COMMISSIONI":
+                m.method="commissioni"
+                m.details=description
+
             else:
-                raise LineError(a)
+                raise LineError(line)
 
 
             return m
