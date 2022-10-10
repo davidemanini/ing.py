@@ -87,7 +87,7 @@ class Account:
             description=l[4]
             amount_str=l[5]
 
-            reason_char='\'\\(\\)A-Za-z0-9 .,-'
+            reason_char='/\'\\(\\)A-Za-z0-9 .,-'
 
             m=Account.Movement()
 
