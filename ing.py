@@ -119,6 +119,13 @@ class Account:
                     m.details["contactless"]=False
                     m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
 
+            elif method=="Trasferimento in accredito":
+                time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
+                m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
+                m.method="card_transfer"
+                m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
+
+
             elif method=="PRELIEVO CARTA":
                 time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
                 m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
@@ -142,7 +149,7 @@ class Account:
             elif method=="ACCREDITO BONIFICO":
                 m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
                 m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
-                m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
+                m.correspondent_name=re.search("Anagrafica Ordinante ([-A-Za-z0-9. ]+) Note:",description)[1]
                 m.details["reason"]=re.search("Note: (["+reason_char+"]*)$",description)[1]
 
                 m.method="incoming_transfer"
