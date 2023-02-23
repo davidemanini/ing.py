@@ -201,6 +201,16 @@ class Account:
                 m.method="commissioni"
                 m.details=description
 
+            elif method=="Canone Mensi.Servizio di Consu":
+                m.method="consulence"
+                m.details["dossier_id"]=re.search("Canone Mensile Servizio di Consulenza dossier numero ([0-9]+)",description)[1]
+
+            elif method=="Acquisto fondi":
+                m.method="fund"
+                fund_info=re.search("Acquisto quote del fondo ([A-Z ]+) su dossier ([0-9]+)",description)
+                m.details["fund_name"]=fund_info[1]
+                m.details["dossier_id"]=fund_info[2]
+
             else:
                 raise LineError(line)
 
