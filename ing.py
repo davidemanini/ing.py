@@ -205,6 +205,10 @@ class Account:
                 m.method="consulence"
                 m.details["dossier_id"]=re.search("Canone Mensile Servizio di Consulenza dossier numero ([0-9]+)",description)[1]
 
+            elif method=="IMPOSTA DI BOLLO INVESTIMENTI":
+                m.method="bolli_investimenti"
+                m.details["dossier_id"]=re.search("Imposta di bollo IA dossier ([0-9]+)",description)[1]
+                
             elif method=="Acquisto fondi":
                 m.method="fund"
                 fund_info=re.search("Acquisto quote del fondo ([A-Z ]+) su dossier ([0-9]+)",description)
