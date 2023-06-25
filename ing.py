@@ -106,7 +106,7 @@ class Account:
                 m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
                 m.method="card"
                 if re.search("Tasso di cambio",description):
-                    currency_info=re.search(" presso ([A-Za-z0-9. ]+)Tasso di cambio ([A-Z]+)/([A-Z]+)=([-+0-9,]+)$",description)
+                    currency_info=re.search(" presso ([A-Za-z0-9. /-]+).Tasso di cambio ([A-Z]+)/([A-Z]+)=([-+0-9,]+)",description)
                     m.correspondent_name=currency_info[1]
                     m.details["currency"]=currency_info[2]
                     m.details["exchange_rate"]=float(re.sub(",",".",currency_info[4]))
@@ -215,6 +215,12 @@ class Account:
                 m.details["fund_name"]=fund_info[1]
                 m.details["dossier_id"]=fund_info[2]
 
+            elif method=="SPESE ASSEGNO CIRCOLARE NON TR":
+                m.method="spese_assegno_circolare"
+
+            elif method=="EMISS.ASSEGNO CIRCOLARE":
+                m.method="assegno_circolare"
+            
             else:
                 raise LineError(line)
 
