@@ -100,7 +100,6 @@ class Account:
             m.correspondent_id=None
 
 
-
             if method=="PAGAMENTO CARTA":
                 time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
                 m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
@@ -115,9 +114,15 @@ class Account:
                 elif re.search(" - Transazione C-less$",description):
                     m.details["contactless"]=True
                     m.correspondent_name=re.search(" presso ([A-Za-z0-9. \\*\\&\\'-]+) - Transazione C-less$",description)[1]
+                    if re.search("Pagamenti trasporti modalita\\' contactless",description):
+                        m.details["trasportation"]=True
                 else:
                     m.details["contactless"]=False
                     m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
+
+
+            elif method=="Carta Credito ING ":
+                m.method="credit_card"
 
             elif method=="Trasferimento in accredito":
                 time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
@@ -220,7 +225,18 @@ class Account:
 
             elif method=="EMISS.ASSEGNO CIRCOLARE":
                 m.method="assegno_circolare"
-            
+
+            elif method=="Accredito Dividendi Fondi":
+                m.method="fund_dividend"
+                c=re.search("Incasso dividendo del fondo ([A-Z ]+)              n. azioni      ([0-9,]+) importo unitario        1,0000000 al netto imposta     ([0-9,]+) euro", description)
+                m.details["fund_name"]=c[1]
+                m.details["shares_no"]=float(re.sub(",",".",c[2]))
+                m.details["tax"]=float(re.sub(",",".",c[3]))
+
+            elif method=="CANONE CARTA DI CREDITO":
+                m.method="credit_card_canon"
+
+                
             else:
                 raise LineError(line)
 
