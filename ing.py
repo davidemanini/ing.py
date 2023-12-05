@@ -220,6 +220,13 @@ class Account:
                 m.details["fund_name"]=fund_info[1]
                 m.details["dossier_id"]=fund_info[2]
 
+                
+            elif method=="Vendita fondi":
+                m.method="fund"
+                fund_info=re.search("Vendita quote del fondo ([A-Z ]+) su dossier ([0-9]+)",description)
+                m.details["fund_name"]=fund_info[1]
+                m.details["dossier_id"]=fund_info[2]
+
             elif method=="SPESE ASSEGNO CIRCOLARE NON TR":
                 m.method="spese_assegno_circolare"
 
