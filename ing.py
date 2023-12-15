@@ -171,6 +171,17 @@ class Account:
 
                 else:
                     raise LineError(line)
+    
+            elif method=="GIRO VERSO MIEI CONTI":
+                try:
+
+                    m.correspondent_id=re.search("^A  ([A-Z0-9]+) ([A-Za-z0-9. ]+)",description)[1]
+                    m.details["reason"]=re.search("^A  ([A-Z0-9]+) ([A-Za-z0-9. ]+)",description)[2]
+
+                    m.method="giro_transfer"
+
+                except:
+                    raise LineError(line)
 
             elif method=="PAGAMENTI DIVERSI":
                 if re.search("Addebito SDD CORE",description):
