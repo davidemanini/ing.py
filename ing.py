@@ -124,6 +124,9 @@ class Account:
             elif method=="Carta Credito ING ":
                 m.method="credit_card"
 
+            elif method=="ADDEBITO CARTA DI CREDITO":
+                m.method="credit_card"
+
             elif method=="Trasferimento in accredito":
                 time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
                 m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
@@ -143,7 +146,7 @@ class Account:
 
                 m.method="cash_withdrawal"
 
-            elif method=="ACCR. STIPENDIO-PENSIONE":
+            elif method=="ACCR. STIPENDIO-PENSIONE" or method=="ACCREDITO STIPENDIO-PENSIONE":
                 m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
                 m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
                 m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
@@ -159,7 +162,7 @@ class Account:
 
                 m.method="incoming_transfer"
 
-            elif method=="VS.DISPOSIZIONE":
+            elif method=="VS.DISPOSIZIONE" or method=="BONIFICO IN USCITA":
                 if re.search("^BONIFICO DA VOI DISPOSTO NOP",description):
 
                     m.details["transaction_id"]=re.search("^BONIFICO DA VOI DISPOSTO NOP ([A-Za-z0-9]+)",description)[1]
@@ -183,6 +186,23 @@ class Account:
                 except:
                     raise LineError(line)
 
+                
+            elif method=="GIROCONTO":
+
+                info=re.search("^DA ([A-Z0-9]+) GIRO da",description)
+                if info!=None:                        
+                    m.correspondent_id=info[1]
+                    m.method="incoming_giro_transfer"
+                        
+                elif re.search("^A  ([A-Z0-9]+) ([A-Za-z0-9. ]+)",description)!=None:
+                    info=re.search("^A  ([A-Z0-9]+) ([A-Za-z0-9. ]+)",description)
+                    m.correspondent_id=info[1]
+                    m.details["reason"]=info[2]
+                    m.method="outgoing_giro_transfer"
+                        
+                else:
+                    raise LineError(line)
+                
             elif method=="PAGAMENTI DIVERSI":
                 if re.search("Addebito SDD CORE",description):
 
@@ -204,6 +224,18 @@ class Account:
 
                 else:
                     raise LineError(line)
+
+            elif method=="ADDEBITO DIRETTO":
+                if re.search("Addebito SDD CORE",description):
+
+                    m.correspondent_id=re.search("Creditor id\\. ([A-Z0-9]+)",description)[1]
+                    m.correspondent_name=re.search("Creditor id\\. ([A-Z0-9]+) (["+reason_char+"]+) Id Mandato ",description)[2]
+                    tr=re.search(" Rif\\. ([0-9A-Z-]+)$",description)
+                    if tr:
+                        m.details["transaction_id"]=tr[1]
+                    m.details["reason"]=re.search("Id Mandato ([0-9A-Za-z-]+) Debitore",description)[1]
+
+                    m.method="sdd"
 
             elif method=="BOLLI GOVERNATIVI":
                 m.method="bolli_governativi"
@@ -232,7 +264,7 @@ class Account:
                 m.details["dossier_id"]=fund_info[2]
 
                 
-            elif method=="Vendita fondi":
+            elif method=="Vendita fondi" or method=="VENDITA FONDI":
                 m.method="fund"
                 fund_info=re.search("Vendita quote del fondo ([A-Z ]+) su dossier ([0-9]+)",description)
                 m.details["fund_name"]=fund_info[1]
@@ -244,7 +276,7 @@ class Account:
             elif method=="EMISS.ASSEGNO CIRCOLARE":
                 m.method="assegno_circolare"
 
-            elif method=="Accredito Dividendi Fondi":
+            elif method=="Accredito Dividendi Fondi" or method=="ACCREDITO DIVIDENDI FONDI":
                 m.method="fund_dividend"
                 c=re.search("Incasso dividendo del fondo ([A-Z ]+)              n. azioni      ([0-9,]+) importo unitario        1,0000000 al netto imposta     ([0-9,]+) euro", description)
                 m.details["fund_name"]=c[1]
