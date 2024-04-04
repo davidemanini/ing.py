@@ -100,7 +100,7 @@ class Account:
             m.correspondent_id=None
 
 
-            if method=="PAGAMENTO CARTA":
+            if method=="PAGAMENTO CARTA" or method=="Pagamento Carta":
                 time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
                 m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
                 m.method="card"
@@ -124,7 +124,7 @@ class Account:
             elif method=="Carta Credito ING ":
                 m.method="credit_card"
 
-            elif method=="ADDEBITO CARTA DI CREDITO":
+            elif method=="ADDEBITO CARTA DI CREDITO" or method=="Addebito Carta Di Credito":
                 m.method="credit_card"
 
             elif method=="Trasferimento in accredito":
@@ -134,7 +134,7 @@ class Account:
                 m.correspondent_name=re.search(" presso ([A-Za-z0-9. ]+)",description)[1]
 
 
-            elif method=="PRELIEVO CARTA":
+            elif method=="PRELIEVO CARTA" or method=="Prelievo Carta":
                 time_info=re.search(" alle ore ([0-9]+):([0-9]+)",description)
                 m.details["time"]=datetime.time(int(time_info[1]),int(time_info[2]))
                 c=re.search(" Div=([A-Z]+) ",description)[1]
@@ -146,7 +146,7 @@ class Account:
 
                 m.method="cash_withdrawal"
 
-            elif method=="ACCR. STIPENDIO-PENSIONE" or method=="ACCREDITO STIPENDIO-PENSIONE":
+            elif method=="ACCR. STIPENDIO-PENSIONE" or method=="ACCREDITO STIPENDIO-PENSIONE" or method=="Accredito Stipendio/Pensione":
                 m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
                 m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
                 m.correspondent_name=re.search("Anagrafica Ordinante ([A-Za-z0-9. ]+) Note:",description)[1]
@@ -154,7 +154,7 @@ class Account:
 
                 m.method="wage"
 
-            elif method=="ACCREDITO BONIFICO":
+            elif method=="ACCREDITO BONIFICO" or method=="Accredito Bonifico":
                 m.details["transaction_id"]=re.search("Bonifico N\\. ([A-Za-z0-9]+)",description)[1]
                 m.correspondent_id=re.search("Codifica Ordinante ([A-Z0-9]+)",description)[1]
                 m.correspondent_name=re.search("Anagrafica Ordinante ([-A-Za-z0-9. ]+) Note:",description)[1]
@@ -162,7 +162,7 @@ class Account:
 
                 m.method="incoming_transfer"
 
-            elif method=="VS.DISPOSIZIONE" or method=="BONIFICO IN USCITA":
+            elif method=="VS.DISPOSIZIONE" or method=="BONIFICO IN USCITA" or method=="Bonifico In Uscita":
                 if re.search("^BONIFICO DA VOI DISPOSTO NOP",description):
 
                     m.details["transaction_id"]=re.search("^BONIFICO DA VOI DISPOSTO NOP ([A-Za-z0-9]+)",description)[1]
@@ -187,7 +187,7 @@ class Account:
                     raise LineError(line)
 
                 
-            elif method=="GIROCONTO":
+            elif method=="GIROCONTO" or method=="Giroconto":
 
                 info=re.search("^DA ([A-Z0-9]+) GIRO da",description)
                 if info!=None:                        
@@ -225,7 +225,7 @@ class Account:
                 else:
                     raise LineError(line)
 
-            elif method=="ADDEBITO DIRETTO":
+            elif method=="ADDEBITO DIRETTO" or method=="Addebito Diretto":
                 if re.search("Addebito SDD CORE",description):
 
                     m.correspondent_id=re.search("Creditor id\\. ([A-Z0-9]+)",description)[1]
@@ -237,11 +237,11 @@ class Account:
 
                     m.method="sdd"
 
-            elif method=="BOLLI GOVERNATIVI":
+            elif method=="BOLLI GOVERNATIVI" or method=="Bolli Governativi":
                 m.method="bolli_governativi"
                 m.details["description"]="bolli_governativi"
 
-            elif method=="Canone servizio SMS OTP":
+            elif method=="Canone servizio SMS OTP" or method=="Canone Servizio Sms Otp":
                 m.method="sms_otp"
                 m.details["description"]="sms_otp"
 
@@ -264,7 +264,7 @@ class Account:
                 m.details["dossier_id"]=fund_info[2]
 
                 
-            elif method=="Vendita fondi" or method=="VENDITA FONDI":
+            elif method=="Vendita Fondi" or method=="VENDITA FONDI":
                 m.method="fund"
                 fund_info=re.search("Vendita quote del fondo ([A-Z ]+) su dossier ([0-9]+)",description)
                 m.details["fund_name"]=fund_info[1]
