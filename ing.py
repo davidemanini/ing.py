@@ -5,7 +5,9 @@ import sys
 import datetime
 import time
 import json
+import csv
 import os
+import itertools
 
 def itastr2amount(s):
     a=s.replace('.','').replace(',','.')
@@ -19,11 +21,18 @@ def engstr2amount(s):
 
 
 class LineError(Exception):
-    def __init__(self, line):
-        self.line = line
+    def __init__(self, method, description):
+        self.method = method
+        self.description = description
 
     def __str__(self):
-        return "LineError: "+self.line
+        return "LineError\nMethod: "+self.method+"\nDescription: "+self.description
+
+
+class UnknownMethodError(LineError):
+
+    def __str__(self):
+        return "Unknown method\nMethod: "+self.method+"\nDescription: "+self.description
 
 
 
@@ -79,25 +88,18 @@ class Account:
             pass
 
 
-        def load_xls_line(line):
-            l=re.search("""([0-9/]+)</td><td border="1">([0-9/]+)</td><td border="1">(.+)</td><td border="1">(.+)</td><td class="excelCurrency" border="1">&euro; ([-+0-9,.]+)</td>""",line)
-            date_account=l[1]
-            date_available=l[2]
-            method=l[3]
-            description=l[4]
-            amount_str=l[5]
-
-            reason_char='/\'\\(\\)A-Za-z0-9 .,-'
-
+        def load_line(date_account,date_available,amount,method,description):
             m=Account.Movement()
 
-            m.date_account=datetime.date(int(date_account[6:]),int(date_account[3:5]),int(date_account[0:2]))
-            m.date_available=datetime.date(int(date_available[6:]),int(date_available[3:5]),int(date_available[0:2]))
-            m.amount=itastr2amount(amount_str)
+            m.date_account=date_account
+            m.date_available=date_available
+            m.amount=amount
 
             m.details={}
             m.correspondent_name=None
             m.correspondent_id=None
+
+            reason_char='/\'\\(\\)A-Za-z0-9 .,-'
 
 
             if method=="PAGAMENTO CARTA" or method=="Pagamento Carta":
@@ -173,7 +175,7 @@ class Account:
                     m.method="incoming_transfer"
 
                 else:
-                    raise LineError(line)
+                    raise LineError(method, description)
     
             elif method=="GIRO VERSO MIEI CONTI":
                 try:
@@ -184,7 +186,7 @@ class Account:
                     m.method="giro_transfer"
 
                 except:
-                    raise LineError(line)
+                    raise LineError(method, description)
 
                 
             elif method=="GIROCONTO" or method=="Giroconto":
@@ -201,7 +203,7 @@ class Account:
                     m.method="outgoing_giro_transfer"
                         
                 else:
-                    raise LineError(line)
+                    raise LineError(method, description)
                 
             elif method=="PAGAMENTI DIVERSI":
                 if re.search("Addebito SDD CORE",description):
@@ -223,7 +225,7 @@ class Account:
                     m.details["reason"]=re.search("euro. CAUSALE: (["+reason_char+"]+)",description)[1]
 
                 else:
-                    raise LineError(line)
+                    raise LineError(method, description)
 
             elif method=="ADDEBITO DIRETTO" or method=="Addebito Diretto":
                 if re.search("Addebito SDD CORE",description):
@@ -249,7 +251,7 @@ class Account:
                 m.method="commissioni"
                 m.details=description
 
-            elif method=="Canone Mensi.Servizio di Consu":
+            elif method=="Canone Mensi.Servizio di Consu" or method=="Canone Mens. Servizio Di Consulenza":
                 m.method="consulence"
                 m.details["dossier_id"]=re.search("Canone Mensile Servizio di Consulenza dossier numero ([0-9]+)",description)[1]
 
@@ -283,12 +285,12 @@ class Account:
                 m.details["shares_no"]=float(re.sub(",",".",c[2]))
                 m.details["tax"]=float(re.sub(",",".",c[3]))
 
-            elif method=="CANONE CARTA DI CREDITO":
+            elif method=="CANONE CARTA DI CREDITO" or method=="Canone Carta Di Credito":
                 m.method="credit_card_canon"
 
                 
             else:
-                raise LineError(line)
+                raise UnknownMethodError(method, description)
 
 
             return m
@@ -306,10 +308,22 @@ class Account:
             return (self.date_account >= obj.date_account)
 
 
-    def load_xls(string):
+        def load_xls_line(line):
+            l=re.search("""([0-9/]+)</td><td border="1">([0-9/]+)</td><td border="1">(.+)</td><td border="1">(.+)</td><td class="excelCurrency" border="1">&euro; ([-+0-9,.]+)</td>""",line)
+
+            date_account=datetime.datetime.strptime(l[1],'%d/%m/%Y').date()
+            date_available=datetime.datetime.strptime(l[2],'%d/%m/%Y').date()
+            amount=itastr2amount(l[5])
+
+            return Account.Movement.load_line(date_account,date_available,amount,l[3],l[4])
+
+
+        
+    def load_xls(f):
         """Consider string as an xls file downloded from the ING website and then
 returns a transaction object, filled with the proper information"""
 
+        string=f.read()
         t=Account()
         interval=re.search("""Nella tabella vedi elencate le operazioni dal ([0-9]+)/([0-9]+)/([0-9]+) al ([0-9]+)/([0-9]+)/([0-9]+)</td>""",string)
         t.start_date=datetime.date(int(interval[3]),int(interval[2]),int(interval[1]))
@@ -331,7 +345,43 @@ returns a transaction object, filled with the proper information"""
         t.initialized=True
         return t
 
-    def load_json(string):
+    def load_csv(f):
+        t=Account()
+        t.iban=f.name.split("_")[0]
+        t.movements=[]
+
+        # Not sure about this
+        t.account_number=int(t.iban[-6:])
+        
+        reader=csv.DictReader(f,delimiter=';')
+
+        for i in reader:
+
+            if i["DESCRIZIONE OPERAZIONE"]=="Saldo iniziale":
+                t.start_account=itastr2amount(i["ENTRATE"])
+                t.start_date=datetime.datetime.strptime(i["DATA CONTABILE"],'%d/%m/%Y').date()
+            elif i["DESCRIZIONE OPERAZIONE"]=="Saldo finale":
+                t.end_account=itastr2amount(i["ENTRATE"])
+                t.end_date=datetime.datetime.strptime(i["DATA CONTABILE"],'%d/%m/%Y').date()
+            else:
+                amount=0
+                if i["USCITE"]=="":
+                    amount=itastr2amount(i["ENTRATE"])
+                else:
+                    amount=itastr2amount(i["USCITE"])
+
+                account_date=datetime.datetime.strptime(i["DATA CONTABILE"],'%d/%m/%Y').date()
+                available_date=datetime.datetime.strptime(i["DATA VALUTA"],'%d/%m/%Y').date()
+                m=Account.Movement.load_line(account_date,available_date,amount,i["CAUSALE"],i["DESCRIZIONE OPERAZIONE"])
+                t.movements.append(m)
+                
+
+        t.movements.sort()
+        t.initialized=True
+        return t
+        
+
+    def load_json(f):
         def decoder(obj):
             def datetime_parser(i,j):
                 if "date" in i:
@@ -364,7 +414,7 @@ returns a transaction object, filled with the proper information"""
                 obj[i]=datetime_parser(i,obj[i])
             return obj
 
-        return json.loads(string,object_hook=decoder)
+        return json.load(f,object_hook=decoder)
 
     def dump_json(self, indent=4):
         if not self.initialized:
@@ -538,14 +588,32 @@ def load_db(data_dir=None):
         data_dir=os.environ['HOME']+'/.ing'
     data_file=data_dir+"/db.json"
     f=open(data_file,"r")
-    string=f.read()
+    db=Account.load_json(f)
     f.close()
-    db=Account.load_json(string)
     assert db.initialized, "The database file "+data_file+" is not initialized"
     return db
 
 
-def add_to_db(t,s=None,data_dir=None):
+def add_to_db(f,data_dir=None):
+
+    if f.name[-3:]=='xls':
+        output_file=data_dir+"/"+date_str+".xls"
+        t=Account.load_xls(f)
+    elif f.name[-3:]=='csv':
+        output_file=data_dir+"/"+f.name
+        t=Account.load_csv(f)
+    elif f.name[-4:]=='json':
+        # this last case should never occour
+        output_file=data_dir+"/"+date_str+".json"
+        t=Account.load_json(f)
+    else:
+        print("Error: format not known.", file=sys.stderr)
+        raise Exception
+
+    f.seek(0)
+    s=f.read()
+    f.close()
+    
     assert t.initialized,"Account must be initialized"
     if data_dir==None:
         data_dir=os.environ['HOME']+'/.ing'
@@ -557,9 +625,8 @@ def add_to_db(t,s=None,data_dir=None):
     data_file=data_dir+"/db.json"
     if os.path.isfile(data_file):
         f=open(data_file,"r")
-        string=f.read()
+        db=Account.load_json(f)
         f.close()
-        db=Account.load_json(string)
         assert db.initialized, "The database file "+data_file+" is not initialized"
 
         if db.end_date>=t.end_date:
@@ -579,8 +646,8 @@ def add_to_db(t,s=None,data_dir=None):
         f.write(t.dump_json())
         f.close()
 
-    if s is not None:
-        f=open(data_dir+"/"+date_str+".xls","w")
+    if output_file is not None:
+        f=open(output_file,"w")
         f.write(s)
         f.close()
 
@@ -640,11 +707,11 @@ def main(arg,environ=os.environ):
     decoder=Account.load_json
     if a.input_file.name[-3:]=="xls":
         decoder=Account.load_xls
+    elif a.input_file.name[-3:]=="csv":
+        decoder=Account.load_csv
     if a.to_json:
-        string=a.input_file.read()
+        t=cutter(decoder(a.input_file))
         a.input_file.close()
-
-        t=cutter(decoder(string))
         a.output_file.write(t.dump_json())
         a.output_file.close()
         return 0
@@ -653,17 +720,7 @@ def main(arg,environ=os.environ):
             print("Error: an input file must be specified.",file=sys.stderr)
             return 1
         try:
-            string=a.input_file.read()
-            a.input_file.close()
-        except OSError as e:
-            print(e, file=sys.stderr)
-            return 1
-        try:
-            t=cutter(decoder(string))
-            if a.input_file.name[-3:]=="xls":
-                add_to_db(t,string,data_dir)
-            else:
-                add_to_db(t,None,data_dir)
+            add_to_db(a.input_file,data_dir)
         except OSError as e:
             print(e, file=sys.stderr)
             return 1
@@ -673,10 +730,8 @@ def main(arg,environ=os.environ):
         return 0
 
     elif a.daily_amount:
-        string=a.input_file.read()
+        t=cutter(decoder(a.input_file))
         a.input_file.close()
-
-        t=cutter(decoder(string))
         daily_amount=t.daily_amount()
         print("date,amount",file=a.output_file)
         for i in daily_amount:
@@ -686,10 +741,9 @@ def main(arg,environ=os.environ):
         return 0
 
     elif a.plot_amount:
-        string=a.input_file.read()
-        a.input_file.close()
 
-        t=cutter(decoder(string))
+        t=cutter(decoder(a.input_file))
+        a.input_file.close()
         daily_amount=t.daily_amount()
 
         x=[i[0] for i in daily_amount]
