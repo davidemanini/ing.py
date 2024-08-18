@@ -7,7 +7,6 @@ import time
 import json
 import csv
 import os
-import itertools
 
 def itastr2amount(s):
     a=s.replace('.','').replace(',','.')
@@ -126,7 +125,7 @@ class Account:
             elif method=="Carta Credito ING ":
                 m.method="credit_card"
 
-            elif method=="ADDEBITO CARTA DI CREDITO" or method=="Addebito Carta Di Credito":
+            elif method=="ADDEBITO CARTA DI CREDITO" or method=="Addebito Carta Di Credito" or method=="Accredito Carta Di Credito":
                 m.method="credit_card"
 
             elif method=="Trasferimento in accredito":
