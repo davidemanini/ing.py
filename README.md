@@ -23,7 +23,7 @@ self-contained script.
 ## Usage
 
 ````
-$ ing.py [option] [action]
+$ ing.py [options] [action]
 ````
 
 ing.py relies on a database stored in the folder `$HOME/.ing` (by
@@ -34,23 +34,23 @@ the database.
 ### Add movements to your database
 
  * [Log in](https://secure.ing.it/login.aspx) into your ING account.  
- * Go to "Conto corrente" > "Conto Corrente Arancio" > "Movimenti"
- * Select all available movements by selecting "Tutti" (this will let 
- you select all the transactions in the last 3 months)
-   ![image](select-all.png)
- * Click on "Cerca" and then on "scarica foglio di calcolo".  
- * Save the file "MovimentiContoCorrenteArancio.xls" into "~/Downloads"
+ * Go to "Conto corrente" > "Altre azioni" > "Scarica i movimenti"
+ * Chose the time range (default is fine) and select CSV as file format.
+ * Then click on "Scarica" (Download).  This will let you download a
+ file whose name is of the form `<IBAN>_ListaTransazioni_<StartDate>_<EndDate>.csv`
+ * Save this file into "~/Downloads", **without changing its name**.
  * At this point you can add these movements to your database
    ````
    $ cd ~/Downloads
-   $ ing.py --input MovimentiContoCorrenteArancio.xls --add-to-db
+   $ ing.py --input `<IBAN>_ListaTransazioni_<StartDate>_<EndDate>.csv` --add-to-db
    ````
    The first time you perform this operation, you will see a message of the form
    ````
    Created data directory /home/user/.ing.
    ````
- * Remember to repeat this operation at least once every 3 months 
- (or better once a month).
+ * Remember to repeat this operation, so that the time intervals of files 
+ you downloaded overlap.  This means at least once every 3 months (or 
+ better once a month).
 
 ### Print daily amount
 
