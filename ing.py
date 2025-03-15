@@ -202,7 +202,9 @@ class Account:
                     m.method="outgoing_giro_transfer"
                         
                 else:
-                    raise LineError(method, description)
+                    m.details["reason"]=description
+                    m.method="giro_transfer"
+                    
                 
             elif method=="PAGAMENTI DIVERSI":
                 if re.search("Addebito SDD CORE",description):
